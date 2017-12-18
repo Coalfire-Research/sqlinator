@@ -1,5 +1,19 @@
 #! /usr/bin/env python3.6
 
+
+# 1. Start the SQLMap API server:
+#    python sqlmapapi.py -s
+#
+# 2. Run this script:
+#    mitmdump -s sqlinator.py
+#
+# 3. Start clicking through the target website
+#
+# 4. Profit
+
+
+# Made with <3 by @byt3bl33d3r
+
 from mitmproxy.script import concurrent
 from time import sleep
 from sys import exit
