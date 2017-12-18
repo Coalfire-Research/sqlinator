@@ -63,11 +63,10 @@ class Sqlinator:
             print(f'[+] Submitted HTTP GET request with taskID {taskid} to sqlmap')
 
         elif flow.request.method == 'POST' and ('POST', flow.request.url) not in seen_urls:
-
             taskid = Sqlinator.create_task()
 
+            data['method'] = 'POST'
             if len(flow.request.content):
-                data['method'] = 'POST'
                 data['data'] = flow.request.text
 
             r = requests.post(f'{API_SERVER}/scan/{taskid}/start', json=data).json()
