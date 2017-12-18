@@ -1,10 +1,12 @@
 #! /usr/bin/env python3.6
 
-from mitmproxy import ctx
 from mitmproxy.script import concurrent
 from time import sleep
+from sys import exit
 import requests
 import threading
+import signal
+
 
 API_SERVER = "http://127.0.0.1:8775"
 
@@ -97,7 +99,19 @@ def log_watcher():
         sleep(5)
 
 
+def signal_handler(signal, frame):
+    print('[*] Outputting results to results.txt')
+    with open('results.txt', 'a+') as results:
+        for vuln in found_vulns:
+            vtype, url = vuln
+            results.write(f'{vtype} {url}\n')
+
+    exit(0)
+
+
 def start():
+    signal.signal(signal.SIGINT, signal_handler)
+
     t = threading.Thread(target=log_watcher, daemon=True)
     t.start()
 
