@@ -12,10 +12,10 @@ It's recommended to install SQLinator with pipenv: `pipenv install &&  pipenv sh
 # Usage
 
 1. Start the SQLMap API server:
-    python sqlmapapi.py -s
+    `python sqlmapapi.py -s`
 
 2. Run this script:
-    mitmdump -s "sqlinator.py <target domain>"
+    `mitmdump -s "sqlinator.py <target domain>"`
 
 3. Start clicking through the target website
 
