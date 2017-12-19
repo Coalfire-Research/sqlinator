@@ -14,12 +14,15 @@
 
 # Made with <3 by @byt3bl33d3r
 
-from mitmproxy.script import concurrent
-from time import sleep
-from sys import exit
 import requests
 import threading
 import signal
+import re
+import argparse
+from requests.exceptions import ConnectionError
+#from mitmproxy.script import concurrent
+from time import sleep
+from sys import exit
 
 
 API_SERVER = "http://127.0.0.1:8775"
@@ -33,13 +36,26 @@ found_vulns = set()
 
 class Sqlinator:
 
-    def create_task():
+    def __init__(self, args):
+        self.args = args
+        self.domain = re.compile(args.domain)
+
+    def create_task(self):
         r = requests.get(f'{API_SERVER}/task/new').json()
         assert r['success'] is True
         return r['taskid']
 
-    @concurrent
-    def request(flow):
+    def start_scan(self, taskid, data):
+        r = requests.post(f'{API_SERVER}/scan/{taskid}/start', json=data).json()
+        assert r['success'] is True
+
+    #Adding the concurrent decorator throws a "TypeError: request() missing 1 required positional argument: 'flow'" error
+    #Not sure what that's all about, removing it for now
+    #@concurrent
+    def request(self, flow):
+        if not re.findall(self.domain, flow.request.host):
+            return flow
+
         data = {
             'url': flow.request.url,
             'randomAgent': True,
@@ -53,24 +69,22 @@ class Sqlinator:
             pass
 
         if flow.request.method == 'GET' and ('GET', flow.request.url) not in seen_urls:
-            taskid = Sqlinator.create_task()
+            taskid = self.create_task()
 
-            r = requests.post(f'{API_SERVER}/scan/{taskid}/start', json=data).json()
-            assert r['success'] is True
+            self.start_scan(taskid, data)
 
             seen_urls.add(('GET', flow.request.url))
 
             print(f'[+] Submitted HTTP GET request with taskID {taskid} to sqlmap')
 
         elif flow.request.method == 'POST' and ('POST', flow.request.url) not in seen_urls:
-            taskid = Sqlinator.create_task()
+            taskid = self.create_task()
 
             data['method'] = 'POST'
             if len(flow.request.content):
                 data['data'] = flow.request.text
 
-            r = requests.post(f'{API_SERVER}/scan/{taskid}/start', json=data).json()
-            assert r['success'] is True
+            self.start_scan(taskid, data)
 
             seen_urls.add(('POST', flow.request.url))
 
@@ -125,7 +139,21 @@ def signal_handler(signal, frame):
 def start():
     signal.signal(signal.SIGINT, signal_handler)
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('domain', type=str)
+    args = parser.parse_args()
+
+    print("[*] Connecting to SQLMap's API ")
+    while True:
+        try:
+            tasks = requests.get(f'{API_SERVER}/admin/0/list').json()
+            assert tasks['success'] is True
+            print('[+] Connected')
+            break
+        except ConnectionError:
+            sleep(5)
+
     t = threading.Thread(target=log_watcher, daemon=True)
     t.start()
 
-    return Sqlinator()
+    return Sqlinator(args)
