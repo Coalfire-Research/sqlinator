@@ -115,10 +115,9 @@ def log_watcher(api_server):
 
                 for entry in logs['log']:
                     message = entry['message']
-                    if message.find('(XSS)') != -1:
-                        if ('XSS', url) not in found_vulns:
-                            print(f"[!] {url} -> {message}")
-                            found_vulns.add(('XSS', url))
+                    if message.find('(XSS)') != -1 and ('XSS', url) not in found_vulns:
+                        print(f"[!] {url} -> {message}")
+                        found_vulns.add(('XSS', url))
 
         sleep(5)
 
