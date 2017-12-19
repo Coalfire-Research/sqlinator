@@ -5,7 +5,7 @@
 #    python sqlmapapi.py -s
 #
 # 2. Run this script:
-#    mitmdump -s sqlinator.py <target domain>
+#    mitmdump -s "sqlinator.py <target domain>"
 #
 # 3. Start clicking through the target website
 #
