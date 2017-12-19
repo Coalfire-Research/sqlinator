@@ -5,7 +5,7 @@
 #    python sqlmapapi.py -s
 #
 # 2. Run this script:
-#    mitmdump -s sqlinator.py
+#    mitmdump -s sqlinator.py <target domain>
 #
 # 3. Start clicking through the target website
 #
@@ -19,16 +19,10 @@ import threading
 import signal
 import re
 import argparse
+import sys
 from requests.exceptions import ConnectionError
-#from mitmproxy.script import concurrent
+# from mitmproxy.script import concurrent
 from time import sleep
-from sys import exit
-
-
-API_SERVER = "http://127.0.0.1:8775"
-
-level = 1  # (1-5)
-risk = 1   # (1-3)
 
 seen_urls = set()
 found_vulns = set()
@@ -38,19 +32,22 @@ class Sqlinator:
 
     def __init__(self, args):
         self.args = args
-        self.domain = re.compile(args.domain)
+        self.level = args.level
+        self.risk = args.risk
+        self.api_server = args.api_server
+        self.domain = re.compile(rf'{args.domain}')
 
     def create_task(self):
-        r = requests.get(f'{API_SERVER}/task/new').json()
+        r = requests.get(f'{self.api_server}/task/new').json()
         assert r['success'] is True
         return r['taskid']
 
     def start_scan(self, taskid, data):
-        r = requests.post(f'{API_SERVER}/scan/{taskid}/start', json=data).json()
+        r = requests.post(f'{self.api_server}/scan/{taskid}/start', json=data).json()
         assert r['success'] is True
 
-    #Adding the concurrent decorator throws a "TypeError: request() missing 1 required positional argument: 'flow'" error
-    #Not sure what that's all about, removing it for now
+    # Adding the concurrent decorator throws a "TypeError: request() missing 1 required positional argument: 'flow'" error
+    # Not sure what that's all about, removing it for now
     #@concurrent
     def request(self, flow):
         if not re.findall(self.domain, flow.request.host):
@@ -59,8 +56,8 @@ class Sqlinator:
         data = {
             'url': flow.request.url,
             'randomAgent': True,
-            'level': level,
-            'risk': risk
+            'level': self.level,
+            'risk': self.risk
         }
 
         try:
@@ -94,19 +91,19 @@ class Sqlinator:
             print(f'[*] Ignoring HTTP {flow.request.method} request')
 
 
-def log_watcher():
+def log_watcher(api_server):
     while True:
-        tasks = requests.get(f'{API_SERVER}/admin/0/list').json()
+        tasks = requests.get(f'{api_server}/admin/0/list').json()
         assert tasks['success'] is True
 
         for taskid, status in tasks['tasks'].items():
             if status == 'terminated':
-                data = requests.get(f'{API_SERVER}/scan/{taskid}/data').json()
-                logs = requests.get(f'{API_SERVER}/scan/{taskid}/log').json()
+                data = requests.get(f'{api_server}/scan/{taskid}/data').json()
+                logs = requests.get(f'{api_server}/scan/{taskid}/log').json()
                 assert data['success'] is True
                 assert logs['success'] is True
 
-                r = requests.post(f'{API_SERVER}/option/{taskid}/get', json={'option': 'url'}).json()
+                r = requests.post(f'{api_server}/option/{taskid}/get', json={'option': 'url'}).json()
                 assert r['success'] is True
 
                 url = r['url']
@@ -133,27 +130,34 @@ def signal_handler(signal, frame):
             vtype, url = vuln
             results.write(f'{vtype} {url}\n')
 
-    exit(0)
+    sys.exit(0)
 
 
 def start():
     signal.signal(signal.SIGINT, signal_handler)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('domain', type=str)
+    parser.add_argument('domain', type=str, help='Domain in scope (supports regex)')
+    parser.add_argument('--level', default=1, choices={1, 2, 3, 4, 5}, type=int, help='Level of tests to perform (1-5, default: 1)')
+    parser.add_argument('--risk', default=1, choices={1, 2, 3}, type=int, help='Risk of tests to perform (1-3, default: 1)')
+    parser.add_argument('--api-server', default='http://127.0.0.1:8775', type=str, help="SQLMap API server URL (default: http://127.0.0.1:8775)")
     args = parser.parse_args()
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
 
     print("[*] Connecting to SQLMap's API ")
     while True:
         try:
-            tasks = requests.get(f'{API_SERVER}/admin/0/list').json()
+            tasks = requests.get(f'{args.api_server}/admin/0/list').json()
             assert tasks['success'] is True
             print('[+] Connected')
             break
         except ConnectionError:
             sleep(5)
 
-    t = threading.Thread(target=log_watcher, daemon=True)
+    t = threading.Thread(target=log_watcher, args=(args.api_server,), daemon=True)
     t.start()
 
     return Sqlinator(args)
