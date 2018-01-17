@@ -21,7 +21,8 @@ import re
 import argparse
 import sys
 from requests.exceptions import ConnectionError
-# from mitmproxy.script import concurrent
+#from mitmproxy.script import concurrent
+from mitmproxy import ctx
 from time import sleep
 
 seen_urls = set()
@@ -49,9 +50,16 @@ class Sqlinator:
     # Adding the concurrent decorator throws a "TypeError: request() missing 1 required positional argument: 'flow'" error
     # Not sure what that's all about, removing it for now
     #@concurrent
-    def request(self, flow):
-        if not re.findall(self.domain, flow.request.host):
+    def response(self, flow):
+        if not re.findall(self.domain, flow.request.host) or flow.response.status_code != 200:
             return flow
+
+        try:
+            content_type = flow.response.headers['Content-Type']
+            if content_type.lower().find('image') != -1:
+                return flow
+        except KeyError:
+            pass
 
         data = {
             'url': flow.request.url,
@@ -72,7 +80,7 @@ class Sqlinator:
 
             seen_urls.add(('GET', flow.request.url))
 
-            print(f'[+] Submitted HTTP GET request with taskID {taskid} to sqlmap')
+            ctx.log.info(f'[+] Submitted HTTP GET request with taskID {taskid} to sqlmap')
 
         elif flow.request.method == 'POST' and ('POST', flow.request.url) not in seen_urls:
             taskid = self.create_task()
@@ -85,10 +93,10 @@ class Sqlinator:
 
             seen_urls.add(('POST', flow.request.url))
 
-            print(f'[+] Submitted HTTP POST request with taskID {taskid} to sqlmap')
+            ctx.log.info(f'[+] Submitted HTTP POST request with taskID {taskid} to sqlmap')
 
         else:
-            print(f'[*] Ignoring HTTP {flow.request.method} request')
+            ctx.log.info(f'[*] Ignoring HTTP {flow.request.method} request')
 
 
 def log_watcher(api_server):
@@ -110,24 +118,25 @@ def log_watcher(api_server):
 
                 if len(data['data']):
                     if ('SQLi', url) not in found_vulns:
-                        print(f'[!] {url} -> Found SQL Injection in url ')
+                        ctx.log.info(f'[!] {url} -> Found SQL Injection in url ')
                         found_vulns.add(('SQLi', url))
 
                 for entry in logs['log']:
                     message = entry['message']
                     if message.find('(XSS)') != -1 and ('XSS', url) not in found_vulns:
-                        print(f"[!] {url} -> {message}")
+                        ctx.log.info(f"[!] {url} -> {message}")
                         found_vulns.add(('XSS', url))
 
         sleep(5)
 
 
 def signal_handler(signal, frame):
-    print('[*] Outputting results to results.txt')
-    with open('results.txt', 'a+') as results:
-        for vuln in found_vulns:
-            vtype, url = vuln
-            results.write(f'{vtype} {url}\n')
+    if found_vulns:
+        ctx.log.info('[*] Outputting results to results.txt')
+        with open('results.txt', 'a+') as results:
+            for vuln in found_vulns:
+                vtype, url = vuln
+                results.write(f'{vtype} {url}\n')
 
     sys.exit(0)
 
@@ -137,21 +146,21 @@ def start():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('domain', type=str, help='Domain in scope (supports regex)')
-    parser.add_argument('--level', default=1, choices={1, 2, 3, 4, 5}, type=int, help='Level of tests to perform (1-5, default: 1)')
-    parser.add_argument('--risk', default=1, choices={1, 2, 3}, type=int, help='Risk of tests to perform (1-3, default: 1)')
-    parser.add_argument('--api-server', default='http://127.0.0.1:8775', type=str, help="SQLMap API server URL (default: http://127.0.0.1:8775)")
+    parser.add_argument('-l', '--level', dest='level', default=1, choices={1, 2, 3, 4, 5}, type=int, help='Level of tests to perform (1-5, default: 1)')
+    parser.add_argument('-r', '--risk', dest='risk', default=1, choices={1, 2, 3}, type=int, help='Risk of tests to perform (1-3, default: 1)')
+    parser.add_argument('-a', '--api-server', dest='api_server', default='http://127.0.0.1:8775', type=str, help="SQLMap API server URL (default: http://127.0.0.1:8775)")
     args = parser.parse_args()
 
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
 
-    print("[*] Connecting to SQLMap's API ")
+    ctx.log.info("[*] Connecting to SQLMap's API ")
     while True:
         try:
             tasks = requests.get(f'{args.api_server}/admin/0/list').json()
             assert tasks['success'] is True
-            print('[+] Connected')
+            ctx.log.info('[+] Connected')
             break
         except ConnectionError:
             sleep(5)
