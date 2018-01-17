@@ -155,7 +155,7 @@ def start():
         parser.print_help()
         sys.exit(1)
 
-    ctx.log.info("[*] Connecting to SQLMap's API ")
+    ctx.log.info("[*] Connecting to SQLMap's API")
     while True:
         try:
             tasks = requests.get(f'{args.api_server}/admin/0/list').json()
