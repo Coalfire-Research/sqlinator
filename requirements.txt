@@ -21,7 +21,7 @@ pycparser==2.19
 pyopenssl==18.0.0
 pyparsing==2.2.2
 pyperclip==1.6.5
-requests==2.19.1
+requests>=2.20.0
 ruamel.yaml==0.15.72
 six==1.11.0
 sortedcontainers==2.0.5

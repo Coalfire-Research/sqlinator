@@ -8,7 +8,7 @@ name = "pypi"
 [packages]
 
 mitmproxy = "*"
-requests = "*"
+requests = "2.20.0"
 
 
 [dev-packages]
