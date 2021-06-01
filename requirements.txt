@@ -26,6 +26,6 @@ ruamel.yaml==0.15.72
 six==1.11.0
 sortedcontainers==2.0.5
 tornado==5.1.1
-urllib3==1.24.2
+urllib3==1.26.5
 urwid==2.0.1
 wsproto==0.11.0
